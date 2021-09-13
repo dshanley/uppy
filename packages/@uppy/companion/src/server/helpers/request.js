@@ -177,6 +177,9 @@ exports.getURLMeta = (url, blockLocalIPs = false) => {
       method: 'HEAD',
       followRedirect: exports.getRedirectEvaluator(url, blockLocalIPs),
       agentClass: exports.getProtectedHttpAgent((new URL(url)).protocol, blockLocalIPs),
+      headers: {
+        'User-Agent': "Mozilla/5.0 (Windows NT 6.1; rv:15.0) Gecko/20100101 Firefox/15.0.1"
+      }
     }
 
     request(opts, (err, response) => {
