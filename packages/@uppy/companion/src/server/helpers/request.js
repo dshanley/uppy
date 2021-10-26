@@ -171,15 +171,16 @@ class HttpsAgent extends https.Agent {
  * @returns {Promise<{type: string, size: number}>}
  */
 exports.getURLMeta = (url, blockLocalIPs = false) => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const opts = {
       uri: url,
       method: 'HEAD',
       followRedirect: exports.getRedirectEvaluator(url, blockLocalIPs),
       agentClass: exports.getProtectedHttpAgent((new URL(url)).protocol, blockLocalIPs),
       headers: {
-        'User-Agent': "Mozilla/5.0 (Windows NT 6.1; rv:15.0) Gecko/20100101 Firefox/15.0.1"
-      }
+        'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; rv:15.0) Gecko/20100101 Firefox/15.0.1',
+      },
+      timeout: 120000,
     }
 
     request(opts, (err, response) => {
@@ -187,7 +188,13 @@ exports.getURLMeta = (url, blockLocalIPs = false) => {
         // @todo possibly set a status code in the error object to get a more helpful
         // hint at what the cause of error is.
         err = err || new Error(`URL server responded with status: ${response.statusCode}`)
-        reject(err)
+        logger.error(err, 'request.getUrlMeta')
+        // skip these errors for now - better that we continue
+        resolve({
+          type: 'text/html',
+          size: 0,
+        })
+        // reject(err)
       } else {
         resolve({
           type: response.headers['content-type'],

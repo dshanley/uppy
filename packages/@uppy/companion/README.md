@@ -9,10 +9,13 @@ Companion is a server integration for [Uppy](https://github.com/transloadit/uppy
 It handles the server-to-server communication between your server and file storage providers such as Google Drive, Dropbox,
 Instagram, etc. **Companion is not a target to upload files to**. For this, use a <https://tus.io> server (if you want resumable) or your existing Apache/Nginx server (if you don't). [See here for full documentation](https://uppy.io/docs/companion/)
 
+## Publish
+
+`npm publish`
 ## Install
 
 ```bash
-npm install @uppy/companion
+npm install @dshanley/companion
 ```
 
 If you don't have a Node.js project with a `package.json` you might want to install/run Companion globally like so: `[sudo] npm install -g @uppy/companion@1.x` (best check the actual latest version, and use that, so (re)installs are reproducible, and upgrades intentional).
