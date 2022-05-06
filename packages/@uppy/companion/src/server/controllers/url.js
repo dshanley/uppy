@@ -128,7 +128,7 @@ const downloadURL = (url, onDataChunk, blockLocalIPs, traceId) => {
 
   request(opts)
     .on('response', (resp) => {
-      if (resp.statusCode >= 300) {
+      if (resp.statusCode >= 404) {
         const err = new Error(`URL server responded with status: ${resp.statusCode}`)
         onDataChunk(err, null)
       } else {
