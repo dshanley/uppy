@@ -168,10 +168,11 @@ exports.getURLMeta = async (url, blockLocalIPs = false) => {
         .on('error', (err) => {
           // skip errors for now, because it's likely that the URL is ok
           // better that we continue
-          logger.error(err, 'controller.url.meta.error')
+          logger.error(err, `controller.url.meta.error, error: ${err.toString()}`)
           resolve({
             type: 'text/html',
             size: 0,
+            statusCode: 200,
           });
           // reject(err)
         })
@@ -189,12 +190,14 @@ exports.getURLMeta = async (url, blockLocalIPs = false) => {
   // unlikely to have to do with our choice of method
   // todo add unit test for this
   if (urlMeta.statusCode >= 400 || urlMeta.size === 0 || urlMeta.size == null) {
+    logger.info(`HEAD request failed with status ${urlMeta.statusCode}, falling back to GET`);
     urlMeta = await requestWithMethod('GET')
   }
 
   if (urlMeta.statusCode >= 404) {
     // @todo possibly set a status code in the error object to get a more helpful
     // hint at what the cause of error is.
+    logger.info(`GET request failed with status ${urlMeta.statusCode}, erroring`);
     throw new Error(`URL server responded with status: ${urlMeta.statusCode}`)
   }
 
