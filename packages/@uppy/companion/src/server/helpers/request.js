@@ -168,7 +168,7 @@ exports.getURLMeta = async (url, blockLocalIPs = false) => {
         .on('error', (err) => {
           // skip errors for now, because it's likely that the URL is ok
           // better that we continue
-          logger.error(err, `controller.url.meta.error, error: ${err.toString()}`)
+          logger.error(err, `${method} controller.url.meta.error, error: ${err.toString()}`)
           resolve({
             type: 'text/html',
             size: 0,

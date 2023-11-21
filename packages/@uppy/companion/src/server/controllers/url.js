@@ -46,15 +46,21 @@ const meta = async (req, res) => {
     logger.debug('URL file import handler running', null, req.id)
     const { allowLocalUrls } = req.companion.options
     if (!validateURL(req.body.url, allowLocalUrls)) {
-      logger.debug('Invalid request body detected. Exiting url meta handler.', null, req.id)
+      logger.error('Invalid request body detected. Exiting url meta handler.', null, req.id)
       return res.status(400).json({ error: 'Invalid request body' })
     }
 
     const urlMeta = await getURLMeta(req.body.url, !allowLocalUrls)
     return res.json(urlMeta)
   } catch (err) {
-    logger.error(err, 'controller.url.meta.error', req.id)
-    return res.status(err.status || 500).json({ message: 'failed to fetch URL metadata' })
+    logger.error(err, `controller.url.meta.error, error ${err.toString()}`, req.id)
+    // return res.status(err.status || 500).json({ message: 'Failed to fetch metadata for URL' })
+    const defaultMeta = {
+      type: 'text/html',
+      size: 0,
+      statusCode: 200,
+    };
+    return res.status(200).json(defaultMeta)
   }
 }
 
