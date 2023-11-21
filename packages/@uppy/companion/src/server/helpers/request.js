@@ -8,7 +8,6 @@ const got = require('got').default
 const path = require('node:path')
 const contentDisposition = require('content-disposition')
 const validator = require('validator')
-
 const logger = require('../logger')
 
 const FORBIDDEN_IP_ADDRESS = 'Forbidden IP address'
@@ -123,8 +122,11 @@ function getProtectedGot ({ url, blockLocalIPs }) {
     }
   }
 
+  // added user-agent or fetching some domains
+  const headers = { 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'}
+
   // @ts-ignore
-  return got.extend({ hooks: { beforeRedirect: [beforeRedirect] }, agent: { http: httpAgent, https: httpsAgent } })
+  return got.extend({ hooks: { beforeRedirect: [beforeRedirect] }, agent: { http: httpAgent, https: httpsAgent }, headers })
 }
 
 module.exports.getProtectedGot = getProtectedGot
@@ -164,7 +166,14 @@ exports.getURLMeta = async (url, blockLocalIPs = false) => {
           })
         })
         .on('error', (err) => {
-          reject(err)
+          // skip errors for now, because it's likely that the URL is ok
+          // better that we continue
+          logger.error(err, 'controller.url.meta.error')
+          resolve({
+            type: 'text/html',
+            size: 0,
+          });
+          // reject(err)
         })
     ))
   }
