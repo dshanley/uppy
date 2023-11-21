@@ -26,11 +26,11 @@ const downloadURL = async (url, blockLocalIPs, traceId) => {
   // see discussion https://github.com/transloadit/uppy/pull/4554/files#r1268677162
   try {
     const protectedGot = getProtectedGot({ url, blockLocalIPs })
-    const stream = protectedGot.stream.get(url, { responseType: 'json' })
+    const stream = protectedGot.stream.get(url, { responseType: 'json', throwHttpErrors: false })
     await prepareStream(stream)
     return stream
   } catch (err) {
-    logger.error(err, 'controller.url.download.error', traceId)
+    logger.error(err, `controller.url.download.error, error: ${err.toString()}`, traceId)
     throw err
   }
 }

@@ -35,7 +35,7 @@ async function startDownUpload ({ req, res, getSize, download }) {
       res.status(400).json({ message: err.message })
       return
     }
-
+    logger.error(err, `controller.upload.error, error: ${err.toString()}`, req.id)
     if (respondWithError(err, res)) return
 
     throw err
