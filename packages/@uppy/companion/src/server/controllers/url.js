@@ -54,13 +54,13 @@ const meta = async (req, res) => {
     return res.json(urlMeta)
   } catch (err) {
     logger.error(err, `controller.url.meta.error, error ${err.toString()}`, req.id)
-    // return res.status(err.status || 500).json({ message: 'Failed to fetch metadata for URL' })
-    const defaultMeta = {
-      type: 'text/html',
-      size: 0,
-      statusCode: 200,
-    };
-    return res.status(200).json(defaultMeta)
+    return res.status(err.status || 500).json({ message: 'Failed to fetch metadata for URL' })
+    // const defaultMeta = {
+    //   type: 'text/html',
+    //   size: 0,
+    //   statusCode: 200,
+    // };
+    // return res.status(200).json(defaultMeta)
   }
 }
 
