@@ -304,6 +304,7 @@ class Uploader {
       const ret = await this.uploadStream(stream)
       if (!ret) return
       const { url, extraData } = ret
+      logger.debug(`tryUploadStream ${url}`, null, this.shortToken);
       this.#emitSuccess(url, extraData)
     } catch (err) {
       if (err instanceof AbortError) {

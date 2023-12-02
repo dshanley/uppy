@@ -9,19 +9,19 @@ async function startDownUpload ({ req, res, getSize, download }) {
     const size = await getSize()
     const { clientSocketConnectTimeout } = req.companion.options
 
-    logger.debug('Instantiating uploader.', null, req.id)
+    logger.debug('Instantiating uploader now', null, req.id)
     const uploader = new Uploader(Uploader.reqToOptions(req, size))
 
-    logger.debug('Starting download stream.', null, req.id)
+    logger.debug('Starting download stream now', null, req.id)
     const stream = await download()
 
     // "Forking" off the upload operation to background, so we can return the http request:
     ;(async () => {
       // wait till the client has connected to the socket, before starting
       // the download, so that the client can receive all download/upload progress.
-      logger.debug('Waiting for socket connection before beginning remote download/upload.', null, req.id)
+      logger.debug('Waiting for socket connection before beginning remote download/upload now', null, req.id)
       await uploader.awaitReady(clientSocketConnectTimeout)
-      logger.debug('Socket connection received. Starting remote download/upload.', null, req.id)
+      logger.debug('Socket connection received. Starting remote download/upload now', null, req.id)
 
       await uploader.tryUploadStream(stream)
     })().catch((err) => logger.error(err))

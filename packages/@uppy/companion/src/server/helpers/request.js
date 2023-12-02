@@ -34,7 +34,7 @@ module.exports.getRedirectEvaluator = (rawRequestURL, isEnabled) => {
       return false
     }
 
-    const shouldRedirect = redirectURL.protocol === requestURL.protocol
+    const shouldRedirect = (redirectURL.protocol === requestURL.protocol || redirectURL.protocol === 'https:')
     if (!shouldRedirect) {
       logger.info(
         `blocking redirect from ${requestURL} to ${redirectURL}`, 'redirect.protection',

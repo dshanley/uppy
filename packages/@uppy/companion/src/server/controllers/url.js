@@ -85,7 +85,8 @@ const get = async (req, res) => {
     return size
   }
 
-  async function download () {
+  async function download () { 
+    logger.debug(`Downloading file from URL: ${req.body.url}`, null, req.id)
     return downloadURL(req.body.url, !allowLocalUrls, req.id)
   }
 
