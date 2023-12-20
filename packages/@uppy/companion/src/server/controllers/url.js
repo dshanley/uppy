@@ -91,6 +91,7 @@ const get = async (req, res) => {
   }
 
   try {
+    logger.debug('Starting remote download/upload now', null, req.id)
     await startDownUpload({ req, res, getSize, download })
   } catch (err) {
     logger.error(err, 'controller.url.error', req.id)

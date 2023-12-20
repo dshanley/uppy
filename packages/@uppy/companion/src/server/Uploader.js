@@ -512,6 +512,8 @@ class Uploader {
     const chunkSize = this.options.chunkSize || (isFileStream ? Infinity : 50e6)
 
     return new Promise((resolve, reject) => {
+      logger.debug('Creating new tus upload', 'uploader.tus.create', this.shortToken);
+      logger.debug(`uploadUrl: ${this.options.uploadUrl}`, 'uploader.tus.create', this.shortToken);
       this.tus = new tus.Upload(stream, {
         endpoint: this.options.endpoint,
         uploadUrl: this.options.uploadUrl,
