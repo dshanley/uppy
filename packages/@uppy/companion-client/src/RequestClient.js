@@ -1,5 +1,6 @@
 'use strict'
 
+import UserFacingApiError from '@uppy/utils/lib/UserFacingApiError'
 // eslint-disable-next-line import/no-extraneous-dependencies
 import pRetry, { AbortError } from 'p-retry'
 
@@ -13,25 +14,26 @@ import AuthError from './AuthError.js'
 import packageJson from '../package.json'
 
 // Remove the trailing slash so we can always safely append /xyz.
-function stripSlash (url) {
+function stripSlash(url) {
   return url.replace(/\/$/, '')
 }
 
 const retryCount = 10 // set to a low number, like 2 to test manual user retries
 const socketActivityTimeoutMs = 5 * 60 * 1000 // set to a low number like 10000 to test this
 
-const authErrorStatusCode = 401
+export const authErrorStatusCode = 401
 
 class HttpError extends Error {
   statusCode
 
   constructor({ statusCode, message }) {
     super(message)
+    this.name = 'HttpError'
     this.statusCode = statusCode
   }
 }
 
-async function handleJSONResponse (res) {
+async function handleJSONResponse(res) {
   if (res.status === authErrorStatusCode) {
     throw new AuthError()
   }
@@ -41,54 +43,57 @@ async function handleJSONResponse (res) {
   }
 
   let errMsg = `Failed request with status: ${res.status}. ${res.statusText}`
+  let errData
   try {
-    const errData = await res.json()
+    errData = await res.json()
 
-    errMsg = errData.message ? `${errMsg} message: ${errData.message}` : errMsg
-    errMsg = errData.requestId
-      ? `${errMsg} request-Id: ${errData.requestId}`
-      : errMsg
-  } catch {
-    /* if the response contains invalid JSON, let's ignore the error */
+    if (errData.message) errMsg = `${errMsg} message: ${errData.message}`
+    if (errData.requestId) errMsg = `${errMsg} request-Id: ${errData.requestId}`
+  } catch (cause) {
+    // if the response contains invalid JSON, let's ignore the error data
+    throw new Error(errMsg, { cause })
+  }
+
+  if (res.status >= 400 && res.status <= 499 && errData.message) {
+    throw new UserFacingApiError(errData.message)
   }
 
   throw new HttpError({ statusCode: res.status, message: errMsg })
 }
-
-// todo pull out into core instead?
-const allowedHeadersCache = new Map()
 
 export default class RequestClient {
   static VERSION = packageJson.version
 
   #companionHeaders
 
-  constructor (uppy, opts) {
+  constructor(uppy, opts) {
     this.uppy = uppy
     this.opts = opts
     this.onReceiveResponse = this.onReceiveResponse.bind(this)
     this.#companionHeaders = opts?.companionHeaders
   }
 
-  setCompanionHeaders (headers) {
+  setCompanionHeaders(headers) {
     this.#companionHeaders = headers
   }
 
-  [Symbol.for('uppy test: getCompanionHeaders')] () {
+  [Symbol.for('uppy test: getCompanionHeaders')]() {
     return this.#companionHeaders
   }
 
-  get hostname () {
+  get hostname() {
     const { companion } = this.uppy.getState()
     const host = this.opts.companionUrl
     return stripSlash(companion && companion[host] ? companion[host] : host)
   }
 
-  async headers () {
+  async headers (emptyBody = false) {
     const defaultHeaders = {
       Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'Uppy-Versions': `@uppy/companion-client=${RequestClient.VERSION}`,
+      ...(emptyBody ? undefined : {
+        // Passing those headers on requests with no data forces browsers to first make a preflight request.
+        'Content-Type': 'application/json',
+      }),
     }
 
     return {
@@ -97,7 +102,7 @@ export default class RequestClient {
     }
   }
 
-  onReceiveResponse ({ headers }) {
+  onReceiveResponse({ headers }) {
     const state = this.uppy.getState()
     const companion = state.companion || {}
     const host = this.opts.companionUrl
@@ -110,95 +115,17 @@ export default class RequestClient {
     }
   }
 
-  #getUrl (url) {
+  #getUrl(url) {
     if (/^(https?:|)\/\//.test(url)) {
       return url
     }
     return `${this.hostname}/${url}`
   }
 
-  /*
-    Preflight was added to avoid breaking change between older Companion-client versions and
-    newer Companion versions and vice-versa. Usually the break will manifest via CORS errors because a
-    version of companion-client could be sending certain headers to a version of Companion server that
-    does not support those headers. In which case, the default preflight would lead to CORS.
-    So to avoid those errors, we do preflight ourselves, to see what headers the Companion server
-    we are communicating with allows. And based on that, companion-client knows what headers to
-    send and what headers to not send.
-
-    The preflight only happens once throughout the life-cycle of a certain
-    Companion-client <-> Companion-server pair (allowedHeadersCache).
-    Subsequent requests use the cached result of the preflight.
-    However if there is an error retrieving the allowed headers, we will try again next time
-  */
-  async preflight (path) {
-    const allowedHeadersCached = allowedHeadersCache.get(this.hostname)
-    if (allowedHeadersCached != null) return allowedHeadersCached
-
-    const fallbackAllowedHeaders = [
-      'accept',
-      'content-type',
-      'uppy-auth-token',
-    ]
-
-    const promise = (async () => {
-      try {
-        const response = await fetch(this.#getUrl(path), { method: 'OPTIONS' })
-
-        const header = response.headers.get('access-control-allow-headers')
-        if (header == null || header === '*') {
-          allowedHeadersCache.set(this.hostname, fallbackAllowedHeaders)
-          return fallbackAllowedHeaders
-        }
-
-        this.uppy.log(
-          `[CompanionClient] adding allowed preflight headers to companion cache: ${this.hostname} ${header}`,
-        )
-
-        const allowedHeaders = header
-          .split(',')
-          .map((headerName) => headerName.trim().toLowerCase())
-        allowedHeadersCache.set(this.hostname, allowedHeaders)
-        return allowedHeaders
-      } catch (err) {
-        this.uppy.log(
-          `[CompanionClient] unable to make preflight request ${err}`,
-          'warning',
-        )
-        // If the user gets a network error or similar, we should try preflight
-        // again next time, or else we might get incorrect behaviour.
-        allowedHeadersCache.delete(this.hostname) // re-fetch next time
-        return fallbackAllowedHeaders
-      }
-    })()
-
-    allowedHeadersCache.set(this.hostname, promise)
-    return promise
-  }
-
-  async preflightAndHeaders (path) {
-    const [allowedHeaders, headers] = await Promise.all([
-      this.preflight(path),
-      this.headers(),
-    ])
-    // filter to keep only allowed Headers
-    return Object.fromEntries(
-      Object.entries(headers).filter(([header]) => {
-        if (!allowedHeaders.includes(header.toLowerCase())) {
-          this.uppy.log(
-            `[CompanionClient] excluding disallowed header ${header}`,
-          )
-          return false
-        }
-        return true
-      }),
-    )
-  }
-
   /** @protected */
-  async request ({ path, method = 'GET', data, skipPostResponse, signal }) {
+  async request({ path, method = 'GET', data, skipPostResponse, signal }) {
     try {
-      const headers = await this.preflightAndHeaders(path)
+      const headers = await this.headers(!data)
       const response = await fetchWithNetworkError(this.#getUrl(path), {
         method,
         signal,
@@ -211,7 +138,7 @@ export default class RequestClient {
       return await handleJSONResponse(response)
     } catch (err) {
       // pass these through
-      if (err instanceof AuthError || err.name === 'AbortError') throw err
+      if (err.isAuthError || err.name === 'UserFacingApiError' || err.name === 'AbortError') throw err
 
       throw new ErrorWithCause(`Could not ${method} ${this.#getUrl(path)}`, {
         cause: err,
@@ -219,21 +146,21 @@ export default class RequestClient {
     }
   }
 
-  async get (path, options = undefined) {
+  async get(path, options = undefined) {
     // TODO: remove boolean support for options that was added for backward compatibility.
     // eslint-disable-next-line no-param-reassign
     if (typeof options === 'boolean') options = { skipPostResponse: options }
     return this.request({ ...options, path })
   }
 
-  async post (path, data, options = undefined) {
+  async post(path, data, options = undefined) {
     // TODO: remove boolean support for options that was added for backward compatibility.
     // eslint-disable-next-line no-param-reassign
     if (typeof options === 'boolean') options = { skipPostResponse: options }
     return this.request({ ...options, path, method: 'POST', data })
   }
 
-  async delete (path, data = undefined, options) {
+  async delete(path, data = undefined, options) {
     // TODO: remove boolean support for options that was added for backward compatibility.
     // eslint-disable-next-line no-param-reassign
     if (typeof options === 'boolean') options = { skipPostResponse: options }
@@ -253,7 +180,7 @@ export default class RequestClient {
    * @param {*} options 
    * @returns 
    */
-  async uploadRemoteFile (file, reqBody, options = {}) {
+  async uploadRemoteFile(file, reqBody, options = {}) {
     try {
       const { signal, getQueue } = options
 
@@ -270,7 +197,7 @@ export default class RequestClient {
             return await this.#requestSocketToken(...args)
           } catch (outerErr) {
             // throwing AbortError will cause p-retry to stop retrying
-            if (outerErr instanceof AuthError) throw new AbortError(outerErr)
+            if (outerErr.isAuthError) throw new AbortError(outerErr)
 
             if (outerErr.cause == null) throw outerErr
             const err = outerErr.cause
@@ -279,8 +206,8 @@ export default class RequestClient {
               [408, 409, 429, 418, 423].includes(err.statusCode)
               || (err.statusCode >= 500 && err.statusCode <= 599 && ![501, 505].includes(err.statusCode))
             )
-            if (err instanceof HttpError && !isRetryableHttpError()) throw new AbortError(err);
-  
+            if (err.name === 'HttpError' && !isRetryableHttpError()) throw new AbortError(err);
+
             // p-retry will retry most other errors,
             // but it will not retry TypeError (except network error TypeErrors)
             throw err
@@ -332,7 +259,7 @@ export default class RequestClient {
    * 
    * @param {{ file: UppyFile, queue: RateLimitedQueue, signal: AbortSignal }} file
    */
-  async #awaitRemoteFileUpload ({ file, queue, signal }) {
+  async #awaitRemoteFileUpload({ file, queue, signal }) {
     let removeEventHandlers
 
     const { capabilities } = this.uppy.getState()
@@ -359,7 +286,7 @@ export default class RequestClient {
           socket.send(JSON.stringify({
             action,
             payload: payload ?? {},
-          }))    
+          }))
         };
 
         function sendState() {
@@ -379,7 +306,7 @@ export default class RequestClient {
             socketAbortController?.abort?.()
             reject(err)
           }
-  
+
           // todo instead implement the ability for users to cancel / retry *currently uploading files* in the UI
           function resetActivityTimeout() {
             clearTimeout(activityTimeout)
@@ -414,7 +341,7 @@ export default class RequestClient {
 
                   try {
                     const { action, payload } = JSON.parse(e.data)
-            
+
                     switch (action) {
                       case 'progress': {
                         emitSocketProgress(this, payload, file)
@@ -430,8 +357,8 @@ export default class RequestClient {
                         const { message } = payload.error
                         throw Object.assign(new Error(message), { cause: payload.error })
                       }
-                        default:
-                          this.uppy.log(`Companion socket unknown action ${action}`, 'warning')
+                      default:
+                        this.uppy.log(`Companion socket unknown action ${action}`, 'warning')
                     }
                   } catch (err) {
                     onFatalError(err)
@@ -444,7 +371,7 @@ export default class RequestClient {
                   if (socket) socket.close()
                   socket = undefined
                 }
-        
+
                 socketAbortController.signal.addEventListener('abort', () => {
                   closeSocket()
                 })
